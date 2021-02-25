@@ -584,18 +584,6 @@ func addKeycloakUsers(keycloakUsers []keycloak.KeycloakAPIUser, added []usersv1.
 					UserName:         osUser.Name,
 				},
 			},
-			RealmRoles: []string{"offline_access", "uma_authorization", "create-realm"},
-			ClientRoles: map[string][]string{
-				"account": {
-					"manage-account",
-					"view-profile",
-				},
-				"master-realm": {
-					"view-clients",
-					"view-realm",
-					"manage-users",
-				},
-			},
 			Groups: []string{dedicatedAdminsGroupName, fullRealmManagersGroupPath},
 		})
 	}
@@ -608,17 +596,6 @@ func promoteKeycloakUsers(allUsers []keycloak.KeycloakAPIUser, promoted []keyclo
 		for i, user := range allUsers {
 			// ID is not populated, have to use UserName. Should be unique on master Realm
 			if promotedUser.UserName == user.UserName {
-				allUsers[i].ClientRoles = map[string][]string{
-					"account": {
-						"manage-account",
-						"view-profile",
-					},
-					"master-realm": {
-						"view-clients",
-						"view-realm",
-						"manage-users",
-					}}
-				allUsers[i].RealmRoles = []string{"offline_access", "uma_authorization", "create-realm"}
 
 				// Add the "dedicated-admins" group if it's not there
 				hasDedicatedAdminGroup := false
@@ -652,13 +629,6 @@ func demoteKeycloakUsers(allUsers []keycloak.KeycloakAPIUser, demoted []keycloak
 		for i, user := range allUsers {
 			// ID is not populated, have to use UserName. Should be unique on master Realm
 			if demotedUser.UserName == user.UserName { // ID is not set but UserName is
-				allUsers[i].ClientRoles = map[string][]string{
-					"account": {
-						"manage-account",
-						"manage-account-links",
-						"view-profile",
-					}}
-				allUsers[i].RealmRoles = []string{"offline_access", "uma_authorization"}
 				// Remove the dedicated-admins group from the user groups list
 				groups := []string{}
 				for _, group := range allUsers[i].Groups {
