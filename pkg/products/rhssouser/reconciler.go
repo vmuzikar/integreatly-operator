@@ -3,8 +3,8 @@ package rhssouser
 import (
 	"context"
 	"fmt"
-
 	l "github.com/integr8ly/integreatly-operator/pkg/resources/logger"
+	"reflect"
 
 	"strings"
 
@@ -390,7 +390,7 @@ func (r *Reconciler) reconcileComponents(ctx context.Context, installation *inte
 		if user.UserName == "" {
 			continue
 		}
-		or, err = r.createOrUpdateKeycloakAdmin(user, ctx, serverClient)
+		or, err = r.createOrUpdateKeycloakAdmin(user, ctx, serverClient, kc)
 		if err != nil {
 			return integreatlyv1alpha1.PhaseFailed, fmt.Errorf("failed to create/update the customer admin user: %w", err)
 		} else {
@@ -484,12 +484,29 @@ func (r *Reconciler) updateMasterRealm(ctx context.Context, serverClient k8sclie
 	return kcr, nil
 }
 
-func (r *Reconciler) createOrUpdateKeycloakAdmin(user keycloak.KeycloakAPIUser, ctx context.Context, serverClient k8sclient.Client) (controllerutil.OperationResult, error) {
+func (r *Reconciler) createOrUpdateKeycloakAdmin(user keycloak.KeycloakAPIUser, ctx context.Context, serverClient k8sclient.Client, kc *keycloak.Keycloak) (controllerutil.OperationResult, error) {
+	kcClient, err := r.KeycloakClientFactory.AuthenticatedClient(*kc)
+	if err != nil {
+		return controllerutil.OperationResultNone, err
+	}
+
 	kcUser := &keycloak.KeycloakUser{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      userHelper.GetValidGeneratedUserName(user),
 			Namespace: r.Config.GetNamespace(),
 		},
+	}
+
+	existingKcUser, err := kcClient.FindUserByUsername(user.UserName, masterRealmName)
+	if existingKcUser != nil {
+		r.Log.Infof("found existing user in RH-SSO instance", l.Fields{"username": existingKcUser.UserName})
+
+		if !reflect.DeepEqual(existingKcUser.FederatedIdentities, user.FederatedIdentities) {
+			r.Log.Warningf("federated identities of users don't match; won't create KeycloakUserCR", l.Fields{"existingUser": existingKcUser.FederatedIdentities, "user": user.FederatedIdentities})
+			return controllerutil.OperationResultNone, nil
+		}
+
+		user.ID = existingKcUser.ID
 	}
 
 	return controllerutil.CreateOrUpdate(ctx, serverClient, kcUser, func() error {
