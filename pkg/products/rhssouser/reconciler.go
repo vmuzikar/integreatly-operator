@@ -485,11 +485,6 @@ func (r *Reconciler) updateMasterRealm(ctx context.Context, serverClient k8sclie
 }
 
 func (r *Reconciler) createOrUpdateKeycloakAdmin(user keycloak.KeycloakAPIUser, ctx context.Context, serverClient k8sclient.Client, kc *keycloak.Keycloak) (controllerutil.OperationResult, error) {
-	kcClient, err := r.KeycloakClientFactory.AuthenticatedClient(*kc)
-	if err != nil {
-		return controllerutil.OperationResultNone, err
-	}
-
 	kcUser := &keycloak.KeycloakUser{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      userHelper.GetValidGeneratedUserName(user),
@@ -497,16 +492,27 @@ func (r *Reconciler) createOrUpdateKeycloakAdmin(user keycloak.KeycloakAPIUser, 
 		},
 	}
 
-	existingKcUser, err := kcClient.FindUserByUsername(user.UserName, masterRealmName)
-	if existingKcUser != nil {
-		r.Log.Infof("found existing user in RH-SSO instance", l.Fields{"username": existingKcUser.UserName})
-
-		if !reflect.DeepEqual(existingKcUser.FederatedIdentities, user.FederatedIdentities) {
-			r.Log.Warningf("federated identities of users don't match; won't create KeycloakUserCR", l.Fields{"existingUser": existingKcUser.FederatedIdentities, "user": user.FederatedIdentities})
-			return controllerutil.OperationResultNone, nil
+	if user.ID == "" {
+		kcClient, err := r.KeycloakClientFactory.AuthenticatedClient(*kc)
+		if err != nil {
+			return controllerutil.OperationResultNone, err
 		}
 
-		user.ID = existingKcUser.ID
+		existingKcUser, err := kcClient.FindUserByUsername(user.UserName, masterRealmName)
+		if err != nil {
+			return controllerutil.OperationResultNone, err
+		}
+
+		if existingKcUser != nil {
+			r.Log.Infof("found existing user in RH-SSO instance", l.Fields{"username": existingKcUser.UserName})
+
+			if !reflect.DeepEqual(existingKcUser.FederatedIdentities, user.FederatedIdentities) {
+				r.Log.Warningf("federated identities of users don't match; won't create KeycloakUserCR", l.Fields{"existingUser": existingKcUser.FederatedIdentities, "user": user.FederatedIdentities})
+				return controllerutil.OperationResultNone, nil
+			}
+
+			user.ID = existingKcUser.ID
+		}
 	}
 
 	return controllerutil.CreateOrUpdate(ctx, serverClient, kcUser, func() error {
