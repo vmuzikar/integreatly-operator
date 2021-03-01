@@ -653,6 +653,24 @@ func demoteKeycloakUsers(allUsers []keycloak.KeycloakAPIUser, demoted []keycloak
 		for i, user := range allUsers {
 			// ID is not populated, have to use UserName. Should be unique on master Realm
 			if demotedUser.UserName == user.UserName { // ID is not set but UserName is
+				// Remove client roles if set by previous operator version
+				clientRoles := make(map[string][]string)
+				for clientName, clientRole := range allUsers[i].ClientRoles {
+					if clientName != "master-realm" {
+						clientRoles[clientName] = clientRole
+					}
+				}
+				allUsers[i].ClientRoles = clientRoles
+
+				// Remove realm roles if set by previous operator version
+				var realmRoles []string
+				for _, realmRole := range allUsers[i].RealmRoles {
+					if realmRole != "create-realm" {
+						realmRoles = append(realmRoles, realmRole)
+					}
+				}
+				allUsers[i].RealmRoles = realmRoles
+
 				// Remove the dedicated-admins group from the user groups list
 				groups := []string{}
 				for _, group := range allUsers[i].Groups {
