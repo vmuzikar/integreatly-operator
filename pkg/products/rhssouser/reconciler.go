@@ -506,7 +506,22 @@ func (r *Reconciler) createOrUpdateKeycloakAdmin(user keycloak.KeycloakAPIUser, 
 		if existingKcUser != nil {
 			r.Log.Infof("found existing user in RH-SSO instance", l.Fields{"username": existingKcUser.UserName})
 
-			if !reflect.DeepEqual(existingKcUser.FederatedIdentities, user.FederatedIdentities) {
+			existingFederatedIdentities, err := kcClient.GetUserFederatedIdentities(existingKcUser.ID, masterRealmName)
+			if err != nil {
+				return controllerutil.OperationResultNone, err
+			}
+
+			existingFederatedIdentity, err := getFederatedIdentity(existingFederatedIdentities)
+			if err != nil {
+				return controllerutil.OperationResultNone, err
+			}
+
+			crFederatedIdentity, err := getFederatedIdentity(user.FederatedIdentities)
+			if err != nil {
+				return controllerutil.OperationResultNone, err
+			}
+
+			if !reflect.DeepEqual(existingFederatedIdentity, crFederatedIdentity) {
 				r.Log.Warningf("federated identities of users don't match; won't create KeycloakUserCR", l.Fields{"existingUser": existingKcUser.FederatedIdentities, "user": user.FederatedIdentities})
 				return controllerutil.OperationResultNone, nil
 			}
@@ -524,6 +539,15 @@ func (r *Reconciler) createOrUpdateKeycloakAdmin(user keycloak.KeycloakAPIUser, 
 
 		return nil
 	})
+}
+
+func getFederatedIdentity(fids []keycloak.FederatedIdentity) (keycloak.FederatedIdentity, error) {
+	for _, fid := range fids {
+		if fid.IdentityProvider == idpAlias {
+			return fid, nil
+		}
+	}
+	return keycloak.FederatedIdentity{}, fmt.Errorf("federated identity for %s was not found", idpAlias)
 }
 
 func GetKeycloakUsers(ctx context.Context, serverClient k8sclient.Client, ns string) ([]keycloak.KeycloakAPIUser, error) {
